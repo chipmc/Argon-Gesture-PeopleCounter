@@ -36,7 +36,8 @@ ulong lastSensorUpdate = 0; // Last time the sensor was updated
 
 // We are going to define some variables so we can expose them with the cloud API
 bool getFaceData();             // Get the face detection data
-bool getGestureData();       // Get the gesture detection data
+bool getGestureData();          // Get the gesture detection data
+void publishData();             // Publish the data to the cloud
  
 // Buffer for formatted output
 char str[100];
@@ -87,31 +88,34 @@ void setup() {
   }
 }
  
- void loop() {
+void loop() {                                 // The main loops runs forever and checks the sensor every "sensorDebounce" milliseconds
   if (millis() - lastSensorUpdate > sensorDebounce) {
     lastSensorUpdate = millis();
-    getFaceData();        // Get data on faces detected
-    getGestureData();    // Get data on gestures detected
+    if (getFaceData() || getGestureData()){  // Get data on gestures detected
+      publishData();                          // Publish the data to the cloud if anything changed
+    }   
   }
 }
 
 // Get the face detection data
 bool getFaceData() {
   static int oldFaceNumber = 0;
+
   faceNumber = gfd.getFaceNumber();
   faceScore = gfd.getFaceScore();
+
   if (faceNumber != oldFaceNumber) {
     oldFaceNumber = faceNumber;
     if (faceNumber == 0) {
       sprintf(str, "No face detected\n");
     }
     else if (faceNumber > 0) {
-      sprintf(str, "detect %d face(s) with %d%% confidence\n", faceNumber, faceScore);
+      sprintf(str, "Detected %d faces with a confidence of %d%%", faceNumber, faceScore);
     }
     else {
-      sprintf(str, "Error in face detection\n");
+      sprintf(str,"Error in face detection\n");
     }
-    Particle.publish("Status", str, PRIVATE);
+    if(Particle.connected()) Particle.publish("Status", str, PRIVATE);
     return true;
   }
   else
@@ -126,22 +130,41 @@ bool getGestureData() {
     // - 4: YES (✌️) - yellow
     // - 5: SIX (🤙) - purple
   static int oldGestureType = 0;
+  char gestureTypeStr[16];
+
   gestureType = gfd.getGestureType();
   gestureScore = gfd.getGestureScore();
+
   if (gestureType != oldGestureType) {
     oldGestureType = gestureType;
     if (gestureType == 0) {
       sprintf(str, "No gesture detected\n");
     }
     else if (gestureType > 0) {
-      sprintf(str, "detect %d gesture(s) with %d%% confidence\n", gestureType, gestureScore);
+      switch (gestureType) {
+        case 1: sprintf(gestureTypeStr, "LIKE"); break;
+        case 2: sprintf(gestureTypeStr, "OK"); break;
+        case 3: sprintf(gestureTypeStr, "STOP"); break;
+        case 4: sprintf(gestureTypeStr, "YES"); break;
+        case 5: sprintf(gestureTypeStr, "SIX"); break;
+        default: sprintf(gestureTypeStr, "Unknown gesture");
+      }
+      sprintf(str, "Dectected a %s gesture with a confidence of %d%%", gestureTypeStr, gestureScore);
     }
     else {
       sprintf(str, "Error in gesture detection\n");
     }
-    Particle.publish("Status", str, PRIVATE);
+    if (Particle.connected()) Particle.publish("Status", str, PRIVATE);
     return true;
   }
   else
     return false;
 }
+
+// Publish the data to the cloud  
+void publishData() {
+  char str[100];
+  sprintf(str, "{\"gesturetype\": %d, \"gesturescore\": %d, \"facenumber\": %d, \"facescore\": %d}", gestureType, gestureScore, faceNumber, faceScore);
+  if (Particle.connected()) Particle.publish("ubidots-data", str, PRIVATE);
+}
+
