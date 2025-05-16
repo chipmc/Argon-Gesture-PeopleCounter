@@ -1,90 +1,98 @@
 /* 
- * Project myProject
- * Author: Your Name
- * Date: 
- * For comprehensive documentation and examples, please visit:
- * https://docs.particle.io/firmware/best-practices/firmware-template/
- */
+ * Project Argon-Gesture-PeopleCounter
+ * Description: This project implements a people counter using the DFRobot GestureFaceDetection sensor.
+ * It detects the number of faces and gestures in front of the sensor and publishes the data to the Particle cloud.
+ * The project uses the Particle Device OS APIs and the DFRobot GestureFaceDetection library.
+ * Author: Charles McClelland 
+ * Date: 5/15/2025
+ * License: MIT
+ * Repo: https://github.com/chipmc/Argon-Gesture-PeopleCounter
+*/
 
-
- // V1.0 - Initial version - Particle Variable implementation for people count and variable
+// v1.0 - Initial version - Particle Variable implementation for people count and variable
+// v1.1 - Made the code non-blocking 
+// v1.2 - Added Particle.publish() to send data to the cloud
  
 // Include Particle Device OS APIs
 #include "Particle.h"
 #include "Arduino.h"
 #include <DFRobot_GestureFaceDetection.h>
 
- // Define the device ID for the GestureFaceDetection sensor
- #define DEVICE_ID 0x72
+// Define the device ID for the GestureFaceDetection sensor
+#define DEVICE_ID 0x72
  
- // Create an instance of DFRobot_GestureFaceDetection_I2C with the specified device ID
- DFRobot_GestureFaceDetection_I2C gfd(DEVICE_ID);
+// Create an instance of DFRobot_GestureFaceDetection_I2C with the specified device ID
+DFRobot_GestureFaceDetection_I2C gfd(DEVICE_ID);
 
- // Define the variables here that will be used to share the data with the cloud
- int faceNumber = 0;
- int faceScore = 0;
- int gestureType = 0;
- int gestureScore = 0;
+// Define the variables here that will be used to share the data with the cloud
+int faceNumber = 0;
+int faceScore = 0;
+int gestureType = 0;
+int gestureScore = 0;
 
- // We are going to define some variables so we can expose them with the cloud API
+// Global variables for configuration - will add storage later
+ulong sensorDebounce = 1000; // Debounce time for the sensor
+ulong lastSensorUpdate = 0; // Last time the sensor was updated
+
+// We are going to define some variables so we can expose them with the cloud API
 bool getFaceData();             // Get the face detection data
 bool getGestureData();       // Get the gesture detection data
  
- // Buffer for formatted output
- char str[100];
+// Buffer for formatted output
+char str[100];
  
- void setup() {
-   // Wait for the sensor to start.
-   delay(5000);
- 
-   // Initialize I2C communication
-   gfd.begin(&Wire);
+void setup() {
+  // Wait for the sensor to start.
+  delay(5000);
+  
+  // Initialize I2C communication
+  gfd.begin(&Wire);
 
-   // Define the Particle variables and functions
-   Particle.variable("faceNumber", faceNumber);
-   Particle.variable("gestureType", gestureType);
+  // Define the Particle variables and functions
+  Particle.variable("faceNumber", faceNumber);
+  Particle.variable("gestureType", gestureType);
  
-   while (!Particle.connected()) {
-     Particle.publish("Status","Waiting for cloud connection",PRIVATE);
-     delay(1000);
-   }
-   Particle.publish("Status","Cloud connected",PRIVATE);
+  while (!Particle.connected()) {
+    Particle.publish("Status","Waiting for cloud connection",PRIVATE);
+    delay(1000);
+  }
+  Particle.publish("Status","Cloud connected",PRIVATE);
 
-   while (!gfd.begin()) {
-     Particle.publish("Status","Communication with device failed, please check connection",PRIVATE);
-     delay(1000);
-   }
-   // Set the face detection threshold. Face scores range from 0 to 100.
-   // Faces with scores above this threshold will be detected.
-   if (gfd.setFaceDetectThres(60)) {
-     Particle.publish("Status","Set the face detection threshold success.", PRIVATE);
-   } else {
-     Particle.publish("Status","Set the face detection threshold fail.", PRIVATE);
-   }
+  while (!gfd.begin()) {
+    Particle.publish("Status","Communication with device failed, please check connection",PRIVATE);
+    delay(1000);
+  }
+  // Set the face detection threshold. Face scores range from 0 to 100.
+  // Faces with scores above this threshold will be detected.
+  if (gfd.setFaceDetectThres(60)) {
+    Particle.publish("Status","Set the face detection threshold success.", PRIVATE);
+  } else {
+    Particle.publish("Status","Set the face detection threshold fail.", PRIVATE);
+  }
  
-   // Set the gesture detection threshold. Gesture scores range from 0 to 100.
-   // Gestures with scores above this threshold will be detected.
-   if (gfd.setGestureDetectThres(60)) {
-     Particle.publish("Status","Set the gesture detection threshold success.", PRIVATE);
-   } else {
-     Particle.publish("Status","Set the gesture detection threshold fail.", PRIVATE);
-   }
+  // Set the gesture detection threshold. Gesture scores range from 0 to 100.
+  // Gestures with scores above this threshold will be detected.
+  if (gfd.setGestureDetectThres(60)) {
+    Particle.publish("Status","Set the gesture detection threshold success.", PRIVATE);
+  } else {
+    Particle.publish("Status","Set the gesture detection threshold fail.", PRIVATE);
+  }
  
-   // Set the gesture detection range.
-   // The range is from 0 to 100; 0 has the smallest detection range, and 100 has the largest.
-   if (gfd.setDetectThres(100)) {
-     Particle.publish("Status","Set the gesture detection range success.", PRIVATE);
-   } else {
-     Particle.publish("Status","Set the gesture detection range fail.", PRIVATE);
-   }
- }
+  // Set the gesture detection range.
+  // The range is from 0 to 100; 0 has the smallest detection range, and 100 has the largest.
+  if (gfd.setDetectThres(100)) {
+    Particle.publish("Status","Set the gesture detection range success.", PRIVATE);
+  } else {
+    Particle.publish("Status","Set the gesture detection range fail.", PRIVATE);
+  }
+}
  
- void loop(){
-
-  getFaceData();        // Get data on faces detected
-  getGestureData();    // Get data on gestures detected
-
-  delay(1000);          // Rate Limit the updates
+ void loop() {
+  if (millis() - lastSensorUpdate > sensorDebounce) {
+    lastSensorUpdate = millis();
+    getFaceData();        // Get data on faces detected
+    getGestureData();    // Get data on gestures detected
+  }
 }
 
 // Get the face detection data
