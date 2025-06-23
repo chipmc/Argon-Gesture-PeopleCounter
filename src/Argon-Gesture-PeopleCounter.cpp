@@ -12,6 +12,7 @@
 // v1.0 - Initial version - Particle Variable implementation for people count and variable
 // v1.1 - Made the code non-blocking 
 // v1.2 - Added Particle.publish() to send data to the cloud
+// v1.3 - Added serial logging for debugging
  
 // Include Particle Device OS APIs
 #include "Particle.h"
@@ -20,7 +21,10 @@
 
 // Define the device ID for the GestureFaceDetection sensor
 #define DEVICE_ID 0x72
- 
+
+// Turn on logging for debugging
+SerialLogHandler logHandler;
+
 // Create an instance of DFRobot_GestureFaceDetection_I2C with the specified device ID
 DFRobot_GestureFaceDetection_I2C gfd(DEVICE_ID);
 
@@ -55,9 +59,11 @@ void setup() {
  
   while (!Particle.connected()) {
     Particle.publish("Status","Waiting for cloud connection",PRIVATE);
+    Log.info("Waiting for cloud connection...");
     delay(1000);
   }
   Particle.publish("Status","Cloud connected",PRIVATE);
+  Log.info("Cloud connected");
 
   while (!gfd.begin()) {
     Particle.publish("Status","Communication with device failed, please check connection",PRIVATE);
@@ -114,8 +120,10 @@ bool getFaceData() {
     }
     else {
       sprintf(str,"Error in face detection\n");
+
     }
     if(Particle.connected()) Particle.publish("Status", str, PRIVATE);
+    Log.info(str);
     return true;
   }
   else

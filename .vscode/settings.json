@@ -4,5 +4,6 @@
     "files.associations": {
         "*.ino": "cpp"
     },
-    "particle.targetDevice": "Argon-Dev"
+    "particle.firmwareVersion": "6.2.1",
+    "particle.targetPlatform": "p2"
 }
