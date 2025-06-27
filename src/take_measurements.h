@@ -20,6 +20,8 @@
 extern char internalTempStr[16];                       // External as this can be called as a Particle variable
 extern char signalStr[64];
 
+#define measure take_measurements::instance()
+
 /**
  * This class is a singleton; you do not create one as a global, on the stack, or with new.
  * 

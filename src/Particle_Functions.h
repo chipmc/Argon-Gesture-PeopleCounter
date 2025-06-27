@@ -53,7 +53,13 @@ public:
      */
     void connectToCloud();
 
-
+    /**
+     * @brief Disconnects from the Particle network completely
+     * 
+     * @return true 
+     * @return false 
+     */
+    bool disconnectFromParticle();
 
 protected:
     /**

@@ -5,6 +5,8 @@
  * @brief  File containing the pinout documentation and initializations
  * */
 
+ // ******************* Not a Singleton - Just a header file for pin definitions **********************
+
 #ifndef DEVICE_PINOUT_H
 #define DEVICE_PINOUT_H
 

@@ -22,12 +22,13 @@ SerialLogHandler logHandler(LOG_LEVEL_INFO, { // Logging level for non-applicati
 	{ "app.pubq", LOG_LEVEL_ERROR},
 	{ "app.seqfile", LOG_LEVEL_ERROR},
   { "comm.dtls", LOG_LEVEL_ERROR},
+  { "comm", LOG_LEVEL_ERROR},
   { "hal", LOG_LEVEL_ERROR},
   { "comm.protocol", LOG_LEVEL_ERROR},
   { "ncp.rltk.client", LOG_LEVEL_ERROR},
   { "app.device", LOG_LEVEL_ERROR},
   { "system", LOG_LEVEL_ERROR},
-  { "app.system.sleep", LOG_LEVEL_ERROR},
+  { "net.ifapi", LOG_LEVEL_ERROR},
   { "app.system.reset", LOG_LEVEL_ERROR},
   { "app.ab1805", LOG_LEVEL_ERROR}
 });
@@ -81,5 +82,49 @@ void Particle_Functions::connectToCloud() {
   Particle.publish("Status","Cloud connected",PRIVATE);
   Log.info("Cloud connected");
 }
+
+bool Particle_Functions::disconnectFromParticle() {                    // Ensures we disconnect cleanly from Particle
+                                                                       // Updated based on this thread: https://community.particle.io/t/waitfor-particle-connected-timeout-does-not-time-out/59181                                                                      		// Updated based on this thread: https://community.particle.io/t/waitfor-particle-connected-timeout-does-not-time-out/59181
+  time_t startTime = Time.now();
+  Log.info("In the disconnect from Particle function");
+  Particle.disconnect();                                               		// Disconnect from Particle
+  waitForNot(Particle.connected, 15000);                               		// Up to a 15 second delay() 
+  Particle.process();
+  if (Particle.connected()) {                      							// As this disconnect from Particle thing can be a·syn·chro·nous, we need to take an extra step to wait, 
+    Log.info("Failed to disconnect from Particle");
+    return(false);
+  }
+  else Log.info("Disconnected from Particle in %i seconds", (int)(Time.now() - startTime));
+  // Then we need to disconnect from Cellular and power down the cellular modem
+  startTime = Time.now();
+  #if Wiring_Cellular
+    Log.info("Disconnecting from Cellular network");  
+    Cellular.disconnect();                                               // Disconnect from the cellular network
+    Cellular.off();                                                      // Turn off the cellular modem
+    waitFor(Cellular.isOff, 30000);                                      // As per TAN004: https://support.particle.io/hc/en-us/articles/1260802113569-TAN004-Power-off-Recommendations-for-SARA-R410M-Equipped-Devices
+    Particle.process();
+    if (Cellular.isOn()) {                                               // At this point, if cellular is not off, we have a problem
+      Log.info("Failed to turn off the Cellular modem");
+      return(false);                                                     // Let the calling function know that we were not able to turn off the cellular modem
+    }
+    else {
+      Log.info("Turned off the cellular modem in %i seconds", (int)(Time.now() - startTime));
+      return true;
+    }
+  #elif Wiring_WiFi
+      Log.info("Disconnecting from WiFi network");
+      WiFi.disconnect();                                                  // Disconnect from the WiFi network
+      WiFi.off();                                                         // Turn off the WiFi modem
+      waitFor(WiFi.isOff, 30000);                                         // Wait for the WiFi modem to turn off
+      Particle.process();
+      if (WiFi.isOn()) {                                                  // At this point, if WiFi is not off, we have a problem
+        Log.info("Failed to turn off the WiFi modem");
+        return(false);                                                    // Let the calling function know that we were not able to turn off
+      } else {
+        Log.info("Turned off the WiFi modem in %i seconds", (int)(Time.now() - startTime));
+        return true;    
+      }
+  #endif
+  }
 
 // This is the end of the Particle_Functions class
