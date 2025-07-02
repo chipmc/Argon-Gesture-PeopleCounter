@@ -30,8 +30,14 @@ void take_measurements::setup() {
 }
 
 bool take_measurements::loop() {
-  if (GestureFaceSensor::instance().loop()) return true; // Call the loop function of the DFRobot GestureFaceDetection sensor
-  else return false; // If the loop function of the DFRobot GestureFaceDetection sensor returns true, then we have new data
+  static ulong currentTime = millis();                // Get the current time in milliseconds
+  bool returned = false;                                // Initialize the return value to false
+	if (millis() - currentTime > sensorConfig.get_pollingRate()) { // If the polling interval has passed, we will check the sensor
+    currentTime = millis(); // Reset the current time
+    if (GestureFaceSensor::instance().loop()) returned = true; // Call the loop function of the DFRobot GestureFaceDetection sensor
+	}
+  else returned = false; // If the loop function of the DFRobot GestureFaceDetection sensor returns true, then we have new data
+  return returned; // Return the value of returned
 }
 
 float take_measurements::tmp36TemperatureC (int adcValue) { 

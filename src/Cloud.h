@@ -37,6 +37,70 @@ public:
      */
     void loop();
 
+    /**
+     * @brief Configure device from cloud defaults using Particle Ledger
+     * 
+     * Retrieves configuration from the "default-settings" ledger and applies
+     * it to the persistent storage structures (sysStatus and sensorConfig)
+     * 
+     * @return true if configuration was successfully applied
+     */
+    bool configureFromCloudDefaults();
+
+    /**
+     * @brief Manually trigger configuration reload from cloud
+     * 
+     * This can be called from a Particle function to force reload configuration
+     * 
+     * @return true if successful
+     */
+    bool reloadConfiguration();
+
+private:
+    /**
+     * @brief Apply messaging configuration from ledger data
+     * 
+     * @param data LedgerData containing messaging config
+     * @return true if successful
+     */
+    bool applyMessagingConfig(const LedgerData& data);
+
+    /**
+     * @brief Apply timing configuration from ledger data
+     * 
+     * @param data LedgerData containing timing config
+     * @return true if successful
+     */
+    bool applyTimingConfig(const LedgerData& data);
+
+    /**
+     * @brief Apply power configuration from ledger data
+     * 
+     * @param data LedgerData containing power config
+     * @return true if successful
+     */
+    bool applyPowerConfig(const LedgerData& data);
+
+    /**
+     * @brief Apply sensor configuration from ledger data
+     * 
+     * @param data LedgerData containing sensor config
+     * @return true if successful
+     */
+    bool applySensorConfig(const LedgerData& data);
+
+    /**
+     * @brief Validate configuration value is within acceptable range
+     * 
+     * @param value Value to validate
+     * @param min Minimum acceptable value
+     * @param max Maximum acceptable value
+     * @param name Parameter name for logging
+     * @return true if valid
+     */
+    template<typename T>
+    bool validateRange(T value, T min, T max, const String& name);
+
 
 protected:
     /**

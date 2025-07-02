@@ -99,6 +99,10 @@ public:
 		uint16_t lastConnectionDuration;                  // How long - in seconds - did it take to last connect to the Particle cloud
 		uint8_t sensorType;                               // What is the sensor type - 0-Pressure Sensor, 1-PIR Sensor
 		bool updatesPending;                              // Has there been a change to the sysStatus that we need to effect 
+		uint16_t reportingInterval;                       // How often do we report in to the Particle cloud - in seconds
+		bool disconnectedMode;                            // Are we in disconnected mode - this is used to prevent the device from trying to connect to the Particle cloud - for Development and testing purposes
+		bool serialConnected;							  // Is the serial port connected - used to determine if we should wait for a serial connection before starting the device
+
 	};
 
 	SysData sysData;
@@ -177,6 +181,15 @@ public:
 
 	bool get_updatesPending() const;
 	void set_updatesPending(bool value);
+
+	uint16_t get_reportingInterval() const;
+	void set_reportingInterval(uint16_t value);
+
+	bool get_disconnectedMode() const;
+	void set_disconnectedMode(bool value);
+
+	bool get_serialConnected() const;
+	void set_serialConnected(bool value);
 
 
 	//Members here are internal only and therefore protected
@@ -277,7 +290,7 @@ public:
 		// You may want to keep a version number in your data.
 		uint16_t faceThreshold;                         // Configdence threshold for face detection
 		uint16_t gestureThreshold;                      // faceNumber to the object in cm
-		uint16_t pollingRate;                           // How often to poll the sensor in seconds
+		uint16_t pollingRate;                           // How often to poll the sensor in seconds - a value of zero means no polling
 	};
 	SensorData sensorData;
 

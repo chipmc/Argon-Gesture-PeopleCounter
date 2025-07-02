@@ -16,6 +16,8 @@
 // v1.4 - Added "digital twin" settings in the cloud to allow for remote configuration of the sensor
 // v1.5 - Implemented some basic archtectureal changes to support the new Particle Device OS APIs and the DFRobot GestureFaceDetection library
 // v1.6 - Moved to a state machine approach.  Added support for the AB1805 RTC / Watchdog library to manage the device's sleep and wake cycles
+// v1.7 - Fixed poling, cloud configuration (default) works and removed Ubidots response susscription as we are using PublishQueuePosixRK for cloud publishing
+
  
 // Include Particle Device OS APIs
 #include "Particle.h"
@@ -34,7 +36,6 @@ void publishStateTransition(void);                  // Keeps track of state mach
 void userSwitchISR();                               // interrupt service routime for the user switch
 void sensorISR();
 void countSignalTimerISR();							// Keeps the Blue LED on
-void UbidotsHandler(const char *event, const char *data); // Handler for the Ubidots integration response event
 void dailyCleanup();								                // Reset each morning
 void softDelay(uint32_t t);                        // Soft delay function to allow for non-blocking code    
 
@@ -68,24 +69,18 @@ unsigned long stayAwake;                            // Stores the time we need t
 
  
 void setup() {
+  System.on(out_of_memory, outOfMemoryHandler);     // Enabling an out of memory handler is a good safety tip. If we run out of memory a System.reset() is done.
 
-  char responseTopic[125];
-	String deviceID = System.deviceID();              // Multiple devices share the same hook - keeps things straight
-	deviceID.toCharArray(responseTopic,125);          // Puts the deviceID into the response topic array
-	// Particle.subscribe(responseTopic, UbidotsHandler, MY_DEVICES);      // Subscribe to the integration response event
-	System.on(out_of_memory, outOfMemoryHandler);     // Enabling an out of memory handler is a good safety tip. If we run out of memory a System.reset() is done.
-
-  Particle_Functions::instance().setup();    // Initialize the Particle functions
-
-  // Remove from production code
-	waitFor(Serial.isConnected, 10000);				    // Wait for serial connection 
-  // Remove from production code
+  Particle_Functions::instance().setup();    	// Initialize the Particle functions
 
   initializePinModes();                         // Initialize the pin modes
 
-  sysStatus.setup();								            // Initialize persistent storage
-  sensorConfig.setup();							            // Initialize the sensor configuration
-	current.setup();                              // Initialize the current status data
+  sysStatus.setup();							// Initialize persistent storage
+  sensorConfig.setup();							// Initialize the sensor configuration
+  current.setup();                              // Initialize the current status data
+
+
+  if (sysStatus.get_serialConnected()) waitFor(Serial.isConnected, 10000);				    // Wait for serial connection 
 
   PublishQueuePosix::instance().setup();          // Initialize the Publish Queue
  
@@ -116,13 +111,16 @@ void setup() {
 	else Log.info("Time is valid - %s", Time.timeStr().c_str());
 
 	// Setup local time and set the publishing schedule
-	LocalTime::instance().withConfig(LocalTimePosixTimezone("EST5EDT,M3.2.0/2:00:00,M11.1.0/2:00:00"));			// East coast of the US
+	// LocalTime::instance().withConfig(LocalTimePosixTimezone("EST5EDT,M3.2.0/2:00:00,M11.1.0/2:00:00"));			// East coast of the US
+  	LocalTime::instance().withConfig(LocalTimePosixTimezone("SGT-8"));                                  // Uncomment for Singapore Time Zone
 	conv.withCurrentTime().convert();  	
+
   
 	attachInterrupt(BUTTON_PIN,userSwitchISR,FALLING);						// We may need to monitor the user switch to change behaviours / modes
 
-	if (state == INITIALIZATION_STATE) state = SLEEPING_STATE;               	// Sleep unless otherwise from above code
-  	Log.info("Startup complete with last connect %s", Time.format(sysStatus.get_lastConnection(), "%T").c_str());
+	// if (state == INITIALIZATION_STATE) state = SLEEPING_STATE;               	// Sleep unless otherwise from above code
+	if (state == INITIALIZATION_STATE) state = CONNECTING_STATE;               	// Connect unless otherwise from above code
+  	Log.info("Startup complete at %s local time", conv.format(TIME_FORMAT_DEFAULT).c_str());
   	digitalWrite(BLUE_LED,LOW);                                          	// Signal the end of startup
 
 }
@@ -136,12 +134,12 @@ void loop() {                                       // The main loops runs forev
 		} break;
 
 		case SLEEPING_STATE: {
-      bool radioOn = false;                                         // Flag to indicate if the radio is on
-      #if Wiring_WiFi
-        radioOn = WiFi.ready();                                    // Check if the WiFi is ready
-      #elif Wiring_Cellular
-        radioOn = Cellular.ready();                                 // Check if the Cellular is ready
-      #endif
+			bool radioOn = false;                                         // Flag to indicate if the radio is on
+			#if Wiring_WiFi
+				radioOn = WiFi.ready();                                    // Check if the WiFi is ready
+			#elif Wiring_Cellular
+				radioOn = Cellular.ready();                                 // Check if the Cellular is ready
+			#endif
 
 			if (state != oldState) publishStateTransition();              	          // We will apply the back-offs before sending to ERROR state - so if we are here we will take action
  
@@ -292,12 +290,22 @@ void loop() {                                       // The main loops runs forev
 		userSwitchDectected = false;
 		state = REPORTING_STATE;
 	}
+
+	if (measure.loop()) {                      // If the sensor detects a face or gesture, we will publish the data
+		if (sysStatus.get_verboseMode()) {
+			Log.info("Face or Gesture detected - publishing data");
+		}
+		state = REPORTING_STATE;                            // Publish the data to the cloud
+	}
+
 } // End of loop
 
 void publishData() {
   char str[100];
   sprintf(str, "{\"gesturetype\": %d, \"gesturescore\": %d, \"facenumber\": %d, \"facescore\": %d}", current.get_gestureType(), current.get_gestureScore(), current.get_faceNumber(), current.get_faceScore());
-  if (Particle.connected()) Particle.publish("ubidots-data", str, PRIVATE);
+  PublishQueuePosix::instance().publish("ubidots-data", str, PRIVATE); // Add to the publish queue
+  // if (Particle.connected()) Particle.publish("ubidots-data", str, PRIVATE);
+  Log.info("Publishing data: %s", str);
 }
 
 void UbidotsHandler(const char *event, const char *data) {            // Looks at the response from Ubidots - Will reset Photon if no successful response

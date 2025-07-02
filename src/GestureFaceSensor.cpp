@@ -44,7 +44,7 @@ void GestureFaceSensor::setup() {
 
     // Set the face detection threshold. Face scores range from 0 to 100.
     // Faces with scores above this threshold will be detected.
-    if (gfd.setFaceDetectThres(60)) {
+    if (gfd.setFaceDetectThres(sensorConfig.get_faceThreshold())) {
         Particle.publish("Status","Set the face detection threshold success.", PRIVATE);
     } else {
         Particle.publish("Status","Set the face detection threshold fail.", PRIVATE);
@@ -52,18 +52,10 @@ void GestureFaceSensor::setup() {
     
     // Set the gesture detection threshold. Gesture scores range from 0 to 100.
     // Gestures with scores above this threshold will be detected.
-    if (gfd.setGestureDetectThres(60)) {
+    if (gfd.setGestureDetectThres(sensorConfig.get_gestureThreshold())) {
         Particle.publish("Status","Set the gesture detection threshold success.", PRIVATE);
     } else {
         Particle.publish("Status","Set the gesture detection threshold fail.", PRIVATE);
-    }
-    
-    // Set the gesture detection range.
-    // The range is from 0 to 100; 0 has the smallest detection range, and 100 has the largest.
-    if (gfd.setDetectThres(100)) {
-        Particle.publish("Status","Set the gesture detection range success.", PRIVATE);
-    } else {
-        Particle.publish("Status","Set the gesture detection range fail.", PRIVATE);
     }
 
 }
@@ -88,6 +80,8 @@ bool GestureFaceSensor::getFaceData() {
     }
     else if (faceNumber > 0) {
       sprintf(str, "Detected %d faces with a confidence of %d %%", faceNumber, faceScore);
+      current.set_faceNumber(faceNumber);
+      current.set_faceScore(faceScore);
     }
     else {
       sprintf(str,"Error in face detection\n");
@@ -128,6 +122,8 @@ bool GestureFaceSensor::getGestureData() {
         default: sprintf(gestureTypeStr, "Unknown gesture");
       }
       sprintf(str, "Detected a %s gesture with a confidence of %d %%", gestureTypeStr, gestureScore);
+      current.set_gestureType(gestureType);
+      current.set_gestureScore(gestureScore);
     }
     else {
       sprintf(str, "Error in gesture detection\n");

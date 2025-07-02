@@ -183,7 +183,28 @@ bool sysStatusData::get_updatesPending() const  {
 }
 void sysStatusData::set_updatesPending(bool value) {
     setValue<bool>(offsetof(SysData,updatesPending), value);
-}   // End of sysStatusData class
+}  
+
+uint16_t sysStatusData::get_reportingInterval() const  {
+    return getValue<uint16_t>(offsetof(SysData,reportingInterval));
+}
+void sysStatusData::set_reportingInterval(uint16_t value) {
+    setValue<uint16_t>(offsetof(SysData, reportingInterval), value);
+}
+
+bool sysStatusData::get_disconnectedMode() const  {
+    return getValue<bool>(offsetof(SysData,disconnectedMode));
+}
+void sysStatusData::set_disconnectedMode(bool value) {
+    setValue<bool>(offsetof(SysData,disconnectedMode), value);
+}  
+
+bool sysStatusData::get_serialConnected() const  {
+    return getValue<bool>(offsetof(SysData,serialConnected));
+}
+void sysStatusData::set_serialConnected(bool value) {
+    setValue<bool>(offsetof(SysData,serialConnected), value);
+}  // End of sysStatusData class
 
 // *****************  Sensor Config Storage Object *******************
 // 

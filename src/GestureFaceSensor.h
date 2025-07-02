@@ -5,6 +5,7 @@
 #include "Arduino.h"
 #include "Wire.h"
 #include "DFRobot_GestureFaceDetection.h"
+#include "MyPersistentData.h"
 
 /**
  * This class is a singleton; you do not create one as a global, on the stack, or with new.
