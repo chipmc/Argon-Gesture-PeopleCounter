@@ -437,8 +437,8 @@ public:
 		float externalTempC;							// Temp Sensor at the ultrasonic device
 		uint8_t alertCode;								// Current Alert Code
 		time_t lastAlertTime;
-		float stateOfCharge;                                // Battery charge level
-		uint8_t batteryState;                             // Stores the current battery state
+		float stateOfCharge;                            // Battery charge level
+		uint8_t batteryState;                           // Stores the current battery state
 	};
 	CurrentData currentData;
 

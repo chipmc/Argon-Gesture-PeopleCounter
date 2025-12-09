@@ -48,6 +48,30 @@ public:
     bool configureFromCloudDefaults();
 
     /**
+     * @brief Configure device from device-specific settings ledger
+     * 
+     * Retrieves configuration from the "device-settings" ledger and applies
+     * it to the persistent storage structures (sysStatus and sensorConfig)
+     * 
+     * @return true if configuration was successfully applied
+     */
+    bool configureFromDeviceSettings();
+
+    /**
+     * @brief Write current device configuration to device-settings ledger
+     * 
+     * @return true if successful
+     */
+    bool writeDeviceConfigurationToCloud();
+
+    /**
+     * @brief Check if device has been configured (has device-settings ledger)
+     * 
+     * @return true if device-settings ledger exists with data
+     */
+    bool isDeviceConfigured();
+
+    /**
      * @brief Manually trigger configuration reload from cloud
      * 
      * This can be called from a Particle function to force reload configuration
@@ -55,6 +79,34 @@ public:
      * @return true if successful
      */
     bool reloadConfiguration();
+
+    /**
+     * @brief Apply device configuration from ledger data
+     * 
+     */
+    static void syncCallback(Ledger ledger);
+
+    /**
+     * @brief Load configuration from persistent memory on startup
+     * 
+     * @return true if valid configuration loaded, false if need to connect to cloud
+     */
+    bool loadConfigurationFromPersistentMemory();
+    
+    /**
+     * @brief Validate current configuration values
+     * 
+     * @return true if all values are within valid ranges
+     */
+    bool validateCurrentConfiguration();
+    
+    /**
+     * @brief Load configuration from cloud when connected
+     * Called from connectToCloud function
+     * 
+     * @return true if successful
+     */
+    bool loadConfigurationFromCloud();
 
 private:
     /**
@@ -101,6 +153,24 @@ private:
     template<typename T>
     bool validateRange(T value, T min, T max, const String& name);
 
+    /**
+     * @brief Create JSON configuration from current device settings
+     * 
+     * @return JSON string with current configuration
+     */
+    String createConfigurationJSON();
+
+    /**
+     * @brief Flag to track if this is first configuration
+     */
+    bool isFirstConfiguration;
+
+    /**
+     * @brief Check if device is in connected mode (stays connected)
+     * 
+     * @return true if device should stay connected for real-time updates
+     */
+    bool isConnectedMode();
 
 protected:
     /**

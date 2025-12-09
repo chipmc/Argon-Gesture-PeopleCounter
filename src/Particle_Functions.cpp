@@ -54,6 +54,8 @@ Particle_Functions::~Particle_Functions() {
 }
 
 void Particle_Functions::setup() {
+  if (sysStatus.get_serialConnected()) waitFor(Serial.isConnected, 10000);				    // Wait for serial connection 
+
   Log.info("Initializing Particle functions and variables");     // Note: Don't have to be connected but these functions need to in first 30 seconds
   // Define the Particle variables and functions
   
@@ -81,6 +83,34 @@ void Particle_Functions::connectToCloud() {
   }
   Particle.publish("Status","Cloud connected",PRIVATE);
   Log.info("Cloud connected");
+}
+
+void Particle_Functions::connectToCloudAndLoadConfig() {
+    Log.info("Connecting to cloud to load configuration");
+    
+    // Connect to cloud first
+    Particle_Functions::connectToCloud();
+    
+    // Wait for connection
+    unsigned long startTime = millis();
+    while (!Particle.connected() && millis() - startTime < 120000) { // 2 minute timeout
+        Particle.process();
+        delay(100);
+    }
+    
+    if (Particle.connected()) {
+        Log.info("Connected to cloud, loading configuration");
+        
+        // Load configuration from cloud
+        if (Cloud::instance().loadConfigurationFromCloud()) {
+            Log.info("Configuration loaded successfully from cloud");
+            sysStatus.set_updatesPending(false);
+        } else {
+            Log.warn("Failed to load configuration from cloud");
+        }
+    } else {
+        Log.warn("Failed to connect to cloud for configuration");
+    }
 }
 
 bool Particle_Functions::disconnectFromParticle() {                    // Ensures we disconnect cleanly from Particle

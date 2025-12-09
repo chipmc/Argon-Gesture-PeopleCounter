@@ -1,11 +1,5 @@
 #include "GestureFaceSensor.h"
 
-// Define the variables here that will be used to share the data with the cloud
-int faceNumber = 0;
-int faceScore = 0;
-int gestureType = 0;
-int gestureScore = 0;
-
 // Buffer for formatted output
 char str[100];
 
@@ -68,20 +62,20 @@ bool GestureFaceSensor::loop() {
 
 // Get the face detection data
 bool GestureFaceSensor::getFaceData() {
-  static int oldFaceNumber = 0;
-
-  faceNumber = gfd.getFaceNumber();
-  faceScore = gfd.getFaceScore();
+  static uint16_t oldFaceNumber = 0;
+  uint16_t faceNumber = gfd.getFaceNumber();
+  uint16_t faceScore = gfd.getFaceScore();
 
   if (faceNumber != oldFaceNumber) {
+    Log.info("Face Number: %d, Old Face Number %d, Face Score: %d", faceNumber, oldFaceNumber, faceScore);
     oldFaceNumber = faceNumber;
+    current.set_faceNumber(faceNumber);
+    current.set_faceScore(faceScore);
     if (faceNumber == 0) {
       sprintf(str, "No face detected\n");
     }
     else if (faceNumber > 0) {
       sprintf(str, "Detected %d faces with a confidence of %d %%", faceNumber, faceScore);
-      current.set_faceNumber(faceNumber);
-      current.set_faceScore(faceScore);
     }
     else {
       sprintf(str,"Error in face detection\n");
@@ -90,8 +84,7 @@ bool GestureFaceSensor::getFaceData() {
     Log.info("%s", str);
     return true;
   }
-  else 
-    return false;
+  else return false;
 }
 
 bool GestureFaceSensor::getGestureData() {
@@ -101,14 +94,15 @@ bool GestureFaceSensor::getGestureData() {
     // - 3: STOP (🤚) - red
     // - 4: YES (✌️) - yellow
     // - 5: SIX (🤙) - purple
-  static int oldGestureType = 0;
+  static uint16_t oldGestureType = 0;
   char gestureTypeStr[16];
-
-  gestureType = gfd.getGestureType();
-  gestureScore = gfd.getGestureScore();
+  uint16_t gestureType = gfd.getGestureType();
+  uint16_t gestureScore = gfd.getGestureScore();
 
   if (gestureType != oldGestureType) {
     oldGestureType = gestureType;
+    current.set_gestureType(gestureType);
+    current.set_gestureScore(gestureScore);
     if (gestureType == 0) {
       sprintf(str, "No gesture detected\n");
     }
@@ -122,8 +116,6 @@ bool GestureFaceSensor::getGestureData() {
         default: sprintf(gestureTypeStr, "Unknown gesture");
       }
       sprintf(str, "Detected a %s gesture with a confidence of %d %%", gestureTypeStr, gestureScore);
-      current.set_gestureType(gestureType);
-      current.set_gestureScore(gestureScore);
     }
     else {
       sprintf(str, "Error in gesture detection\n");
@@ -132,7 +124,6 @@ bool GestureFaceSensor::getGestureData() {
     Log.info("%s", str);
     return true;
   }
-  else
-    return false;
+  else return false;
 }
 

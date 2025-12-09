@@ -11,6 +11,7 @@
 #define __PARTICLE_FUNCTIONS_H
 
 #include "Particle.h"
+#include "Cloud.h"
 
 /**
  * This class is a singleton; you do not create one as a global, on the stack, or with new.
@@ -45,14 +46,21 @@ public:
     void loop();
 
     /**
+     * @brief Connect to the Particle cloud and load configuration
+     * 
+     * This function connects to cloud and triggers configuration loading
+     * Called when device needs to get/update configuration
+     */
+    void connectToCloudAndLoadConfig();
+    
+    /**
      * @brief Connect to the Particle cloud
      * 
-     * This function will return the current battery state.
-     * 
-     * @return true if the battery is in a good state, false otherwise
+     * This function connects to the Particle cloud
+     * Called when device needs to connect to cloud
      */
     void connectToCloud();
-
+    
     /**
      * @brief Disconnects from the Particle network completely
      * 

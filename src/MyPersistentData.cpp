@@ -242,12 +242,12 @@ void sensorConfigData::loop() {
 bool sensorConfigData::validate(size_t dataSize) {
     bool valid = PersistentDataFile::validate(dataSize);
     if (valid) {
-        if (sensorConfig.get_faceThreshold() < 0 || sensorConfig.get_faceThreshold()  > 10) {
-            Log.info("current faceThreshold not valid =%d cm" , sensorConfig.get_faceThreshold());
+        if (sensorConfig.get_faceThreshold() < 0 || sensorConfig.get_faceThreshold()  > 100) {
+            Log.info("Sensor config: faceThreshold not valid =%d %%" , sensorConfig.get_faceThreshold());
             valid = false;
         }
     }
-    Log.info("current faceThreshold is %s",(valid) ? "valid": "not valid");
+    Log.info("Sensor config: faceThreshold is %s",(valid) ? "valid": "not valid");
     return valid;
 }
 
@@ -328,11 +328,16 @@ bool currentStatusData::validate(size_t dataSize) {
     bool valid = PersistentDataFile::validate(dataSize);
     if (valid) {
         if (current.get_faceNumber() < 0 || current.get_faceNumber()  > 10) {
-            Log.info("current faceNumber not valid =%d cm" , current.get_faceNumber());
+            Log.info("Current: faceNumber not valid =%d" , current.get_faceNumber());
+            current.set_faceNumber(0);                                  // Reset to 0 if invalid
+            current.set_gestureType(0);                                  // Reset gesture type to 0
+            current.set_gestureScore(0);
+            current.set_faceScore(0);
+            current.set_lastCountTime(Time.now());
             valid = false;
         }
     }
-    Log.info("current faceNumber is %s",(valid) ? "valid": "not valid");
+    Log.info("Current: faceNumber is %s",(valid) ? "valid": "not valid");
     return valid;
 }
 

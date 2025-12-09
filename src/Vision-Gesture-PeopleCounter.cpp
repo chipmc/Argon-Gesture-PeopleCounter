@@ -79,9 +79,6 @@ void setup() {
   sensorConfig.setup();							// Initialize the sensor configuration
   current.setup();                              // Initialize the current status data
 
-
-  if (sysStatus.get_serialConnected()) waitFor(Serial.isConnected, 10000);				    // Wait for serial connection 
-
   PublishQueuePosix::instance().setup();          // Initialize the Publish Queue
  
   ab1805.withFOUT(D8).setup();                	// Initialize AB1805 RTC   
@@ -90,6 +87,12 @@ void setup() {
   // Particle_Functions::instance().connectToCloud(); // Connect to the Particle cloud
 
   Cloud::instance().setup();                    // Initialize the cloud functions
+
+  // Check if we need to connect for configuration updates
+  if (sysStatus.get_updatesPending()) {
+      Log.info("Configuration updates pending, will start in CONNECTING_STATE");
+      state = CONNECTING_STATE;  // Override the default state to force connection
+  }
 
   take_measurements::instance().setup();        // Initialize the take_measurements functions
 
@@ -177,24 +180,17 @@ void loop() {                                       // The main loops runs forev
 		case REPORTING_STATE: {
 			if (state != oldState) publishStateTransition();
 			sysStatus.set_lastReport(Time.now());                              // We are only going to report once each hour from the IDLE state.  We may or may not connect to Particle
-			measure.loop();                                                // Take Measurements here for reporting
+			measure.loop();                                               	   // Take Measurements here for reporting
 			if (Time.hour() == sysStatus.get_openTime()) dailyCleanup();       // Once a day, clean house and publish to Google Sheets
-			publishData();                        // Publish hourly but not at opening time as there is nothing to publish
-			state = CONNECTING_STATE;                                          // Default behaviour would be to connect and send report to Ubidots
+			publishData();                        						   	   // Publish hourly but not at opening time as there is nothing to publish
+			state = IDLE_STATE;                                    			   // Since we are using PublishQueuePosixRK, we don't need to wait for a response from the webhook
 
-			// Let's see if we need to connect 
-			if (Particle.connected()) {                                        // We are already connected go to response wait
-				stayAwake = stayAwakeLong;                                      // Keeps device awake after reboot - helps with recovery
-				stayAwakeTimeStamp = millis();
-				state = RESP_WAIT_STATE;
-			}
-			// If we are in a low battery state - we are not going to connect unless we are over-riding with user switch (active low)
-			else if (sysStatus.get_lowBatteryMode() && digitalRead(BUTTON_PIN)) {
-				Log.info("Not connecting - low battery mode");
-				state = IDLE_STATE;
+			if (Particle.connected() || sysStatus.get_disconnectedMode()) {
+				state = IDLE_STATE;                                      // Default behaviour would be to connect and send report to Ubidots
+				Log.info("Going back to IDLE_STATE - %s", sysStatus.get_disconnectedMode() ? "disconnected mode" : Particle.connected() ? "already connected" : "NULL");
 			}
 			// If we are in low power mode, we may bail if battery is too low and we need to reduce reporting frequency
-			else if (sysStatus.get_lowPowerMode() && digitalRead(BUTTON_PIN)) {      // Low power mode and user switch not pressed
+			if (sysStatus.get_lowPowerMode()) {      							// Low power mode
 				if (current.get_stateOfCharge() > 65) {
 					Log.info("Sufficient battery power connecting");
 				}
@@ -207,40 +203,26 @@ void loop() {                                       // The main loops runs forev
 					state = IDLE_STATE;                                            // Will send us to connecting state - and it will send us back here
 					break;                                                         // Leave this state and go connect - will return only if we are successful in connecting
 				}
+				else if (digitalRead(BUTTON_PIN)) {
+					Log.info("User switch pressed - connecting to Particle");
+					state = CONNECTING_STATE;                                    // Go to connecting state
+				}
+				else {
+					Log.info("Not connecting - low power mode and user switch not pressed");
+					state = IDLE_STATE;                                         // Will send us to connecting state - and it will send us back here
+				}
 			}
 		} break;
 
-  		case RESP_WAIT_STATE: {
-    		static unsigned long webhookTimeStamp = 0;                         // Webhook time stamp
-    		if (state != oldState) {
-      			webhookTimeStamp = millis();                                     // We are connected and we have published, head to the response wait state
-      			dataInFlight = true;                                             // set the data inflight flag
-      			publishStateTransition();
-    		}
-
-    		if (!dataInFlight)  {                                              // Response received --> back to IDLE state
-				stayAwake = stayAwakeLong;
-				stayAwakeTimeStamp = millis();
-				// sysStatus.set_lowPowerMode(true);
-      			state = IDLE_STATE;
-    		}
-    		else if (millis() - webhookTimeStamp > webhookWait) {              // If it takes too long - will need to reset
-				Log.info("Webhook timeout - resetting");
-      			state = ERROR_STATE;                                             // Go to the ERROR state to decide our fate
-    		}
-  		} break;
-
   		case CONNECTING_STATE:{                                              // Will connect - or not and head back to the Idle state - We are using a 3,5, 7 minute back-off approach as recommended by Particle
-			static State retainedOldState;                                     // Keep track for where to go next (depends on whether we were called from Reporting)
 			static unsigned long connectionStartTimeStamp;                     // Time in Millis that helps us know how long it took to connect
 			char data[64];                                                     // Holder for message strings
 
 			if (state != oldState) {                                           // Non-blocking function - these are first time items
-			retainedOldState = oldState;                                     // Keep track for where to go next
-			sysStatus.set_lastConnectionDuration(0);                            // Will exit with 0 if we do not connect or are already connected.  If we need to connect, this will record connection time.
-			publishStateTransition();
-			connectionStartTimeStamp = millis();                             // Have to use millis as the clock may get reset on connect
-			Particle.connect();                                              // Tells Particle to connect, now we need to wait
+				sysStatus.set_lastConnectionDuration(0);                            // Will exit with 0 if we do not connect or are already connected.  If we need to connect, this will record connection time.
+				publishStateTransition();
+				connectionStartTimeStamp = millis();                             // Have to use millis as the clock may get reset on connect
+				Particle.connect();                                              // Tells Particle to connect, now we need to wait
 			}
 
 			sysStatus.set_lastConnectionDuration(int((millis() - connectionStartTimeStamp)/1000));
@@ -253,12 +235,12 @@ void loop() {                                       // The main loops runs forev
 				snprintf(data, sizeof(data),"Connected in %i secs",sysStatus.get_lastConnectionDuration());  // Make up connection string and publish
 				Log.info(data);
 				if (sysStatus.get_verboseMode()) Particle.publish("Cellular",data,PRIVATE);
-				(retainedOldState == REPORTING_STATE) ? state = RESP_WAIT_STATE : state = IDLE_STATE; // so, if we are connecting to report - next step is response wait - otherwise IDLE
+				state = IDLE_STATE; 											// so, if we are connecting to report - next step is response wait - otherwise IDLE
 			}
-			else if (sysStatus.get_lastConnectionDuration() > 600) { // What happens if we do not connect
+			else if (sysStatus.get_lastConnectionDuration() > 600) { 			// What happens if we do not connect
 				state = ERROR_STATE;                                             // Note - not setting the ERROR timestamp to make this go quickly
 			}
-			else {} // We go round the main loop again
+			else {} 															// We go round the main loop again
 		} break;
 
 		case ERROR_STATE: {													// Where we go if things are not quite right
@@ -295,15 +277,18 @@ void loop() {                                       // The main loops runs forev
 		if (sysStatus.get_verboseMode()) {
 			Log.info("Face or Gesture detected - publishing data");
 		}
+		Log.info("Sending us to REPORTING_STATE");
 		state = REPORTING_STATE;                            // Publish the data to the cloud
 	}
+
+	Cloud::instance().loop();  // Handle cloud configuration updates
 
 } // End of loop
 
 void publishData() {
   char str[100];
   sprintf(str, "{\"gesturetype\": %d, \"gesturescore\": %d, \"facenumber\": %d, \"facescore\": %d}", current.get_gestureType(), current.get_gestureScore(), current.get_faceNumber(), current.get_faceScore());
-  PublishQueuePosix::instance().publish("ubidots-data", str, PRIVATE); // Add to the publish queue
+  // PublishQueuePosix::instance().publish("ubidots-data", str, PRIVATE); // Add to the publish queue
   // if (Particle.connected()) Particle.publish("ubidots-data", str, PRIVATE);
   Log.info("Publishing data: %s", str);
 }
