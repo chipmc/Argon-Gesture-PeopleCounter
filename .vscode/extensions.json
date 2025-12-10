@@ -1,0 +1,7 @@
+{
+    "recommendations": [
+        "particle.particle-vscode-core",
+        "particle.particle-vscode-pack",
+        "particle.particle-vscode-theme"
+    ]
+}

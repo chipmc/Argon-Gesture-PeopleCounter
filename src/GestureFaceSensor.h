@@ -1,84 +1,47 @@
+// src/GestureFaceSensor.h - Updated to implement ISensor
 #ifndef GESTUREFACESENSOR_H
 #define GESTUREFACESENSOR_H
 
-#include "Particle.h"
-#include "Arduino.h"
-#include "Wire.h"
+#include "ISensor.h"
 #include "DFRobot_GestureFaceDetection.h"
 #include "MyPersistentData.h"
+#include "Wire.h"
 
 /**
- * This class is a singleton; you do not create one as a global, on the stack, or with new.
+ * @brief Concrete implementation of ISensor for DFRobot gesture/face detection
  * 
- * From global application setup you must call:
- * DFRobot_GestureFaceDetection::instance().setup();
- * 
- * From global application loop you must call:
- * DFRobot_GestureFaceDetection::instance().loop();
+ * This class wraps the DFRobot GestureFaceDetection library and provides
+ * a standardized interface for the sensor manager.
  */
-class GestureFaceSensor {
+class GestureFaceSensor : public ISensor {
 public:
     /**
-     * @brief Gets the singleton instance of this class, allocating it if necessary
-     * 
-     * Use GestureFaceDetection::instance() to instantiate the singleton.
+     * @brief Gets the singleton instance of this class
      */
     static GestureFaceSensor &instance();
-
-    /**
-     * @brief Perform setup operations; call this from global application setup()
-     * 
-     * You typically use GestureFaceDetection::instance().setup();
-     */
-    void setup();
-
-    /**
-     * @brief Perform application loop operations; call this from global application loop()
-     * 
-     * You typically use GestureFaceDetection::instance().loop();
-     */
-    bool loop();
-
-    /** @brief The number of faces detected 
-     * 
-     */
-    bool getFaceData();             // Get the face detection data
-
-    /** @brief The type of gesture detected 
-     * 
-     */
-    bool getGestureData();          // Get the gesture detection data
-
-
+    
+    // ISensor interface implementation
+    bool setup() override;
+    bool loop() override;
+    SensorData getData() const override;
+    String getSensorType() const override { return "GestureFace"; }
+    bool isReady() const override { return _initialized; }
+    void reset() override;
+    
 protected:
-    /**
-     * @brief The constructor is protected because the class is a singleton
-     * 
-     * Use DFRobot_GestureFaceDetection::instance() to instantiate the singleton.
-     */
     GestureFaceSensor();
-
-    /**
-     * @brief The destructor is protected because the class is a singleton and cannot be deleted
-     */
     virtual ~GestureFaceSensor();
-
-    /**
-     * This class is a singleton and cannot be copied
-     */
-    GestureFaceSensor(const GestureFaceSensor&) = delete;
-
-    /**
-     * This class is a singleton and cannot be copied
-     */
-    GestureFaceSensor& operator=(const GestureFaceSensor&) = delete;
-
-    /**
-     * @brief Singleton instance of this class
-     * 
-     * The object pointer to this class is stored here. It's NULL at system boot.
-     */
+    GestureFaceSensor(const GestureFaceSensor &) = delete;
+    GestureFaceSensor &operator=(const GestureFaceSensor &) = delete;
+    
     static GestureFaceSensor *_instance;
-
+    bool _initialized;
+    SensorData _lastData;
+    DFRobot_GestureFaceDetection_I2C* _gfd;
+    
+private:
+    bool getFaceData();
+    bool getGestureData();
 };
-#endif  /* __GESTUREFACESENSOR_H */
+
+#endif /* GESTUREFACESENSOR_H */

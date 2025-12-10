@@ -1,13 +1,11 @@
+// src/GestureFaceSensor.cpp - Updated implementation
 #include "GestureFaceSensor.h"
 
 // Buffer for formatted output
-char str[100];
+static char str[100];
 
-// Define the device IpartiD for the GestureFaceDetection sensor
+// Define the device I2C address for the GestureFaceDetection sensor
 #define DEVICE_ID 0x72
-
-// Create an instance of DFRobot_GestureFaceDetection_I2C with the specified device ID
-DFRobot_GestureFaceDetection_I2C gfd(DEVICE_ID);
 
 GestureFaceSensor *GestureFaceSensor::_instance;
 
@@ -19,111 +17,174 @@ GestureFaceSensor &GestureFaceSensor::instance() {
     return *_instance;
 }
 
-GestureFaceSensor::GestureFaceSensor() {
+GestureFaceSensor::GestureFaceSensor() : _initialized(false), _gfd(nullptr) {
+    _lastData.sensorType = "GestureFace";
 }
 
 GestureFaceSensor::~GestureFaceSensor() {
+    if (_gfd) {
+        delete _gfd;
+        _gfd = nullptr;
+    }
 }
 
-void GestureFaceSensor::setup() {
-
-    // Initialize I2C communication
-    gfd.begin(&Wire);
-
-    while (!gfd.begin()) {
-        Particle.publish("Status","Communication with device failed, please check connection",PRIVATE);
-        delay(1000);
-    }
-    Particle.publish("Status","Communication with device established",PRIVATE);
-
-    // Set the face detection threshold. Face scores range from 0 to 100.
-    // Faces with scores above this threshold will be detected.
-    if (gfd.setFaceDetectThres(sensorConfig.get_faceThreshold())) {
-        Particle.publish("Status","Set the face detection threshold success.", PRIVATE);
-    } else {
-        Particle.publish("Status","Set the face detection threshold fail.", PRIVATE);
+bool GestureFaceSensor::setup() {
+    Log.info("Initializing GestureFace sensor");
+    
+    // Create the sensor instance
+    _gfd = new DFRobot_GestureFaceDetection_I2C(DEVICE_ID);
+    
+    if (!_gfd) {
+        Log.error("Failed to allocate GestureFace sensor");
+        return false;
     }
     
-    // Set the gesture detection threshold. Gesture scores range from 0 to 100.
-    // Gestures with scores above this threshold will be detected.
-    if (gfd.setGestureDetectThres(sensorConfig.get_gestureThreshold())) {
-        Particle.publish("Status","Set the gesture detection threshold success.", PRIVATE);
+    // Initialize I2C communication
+    if (_gfd->begin(&Wire)) {
+        _initialized = true;
+        Log.info("GestureFace sensor communication established");
     } else {
-        Particle.publish("Status","Set the gesture detection threshold fail.", PRIVATE);
+        Log.error("GestureFace sensor communication failed");
+        return false;
     }
-
+    
+    // Set the face detection threshold
+    if (_gfd->setFaceDetectThres(sensorConfig.get_faceThreshold())) {
+        Log.info("Face detection threshold set to %d", sensorConfig.get_faceThreshold());
+    } else {
+        Log.warn("Failed to set face detection threshold");
+    }
+    
+    // Set the gesture detection threshold
+    if (_gfd->setGestureDetectThres(sensorConfig.get_gestureThreshold())) {
+        Log.info("Gesture detection threshold set to %d", sensorConfig.get_gestureThreshold());
+    } else {
+        Log.warn("Failed to set gesture detection threshold");
+    }
+    
+    return _initialized;
 }
 
 bool GestureFaceSensor::loop() {
-    if (GestureFaceSensor::getFaceData() || GestureFaceSensor::getGestureData()) return true; // If we have new data, return true
-    else return false; // If no new data, return false
+    if (!_initialized || !_gfd) {
+        return false;
+    }
+    
+    bool hasNewData = false;
+    
+    // Check for face data
+    if (getFaceData()) {
+        hasNewData = true;
+    }
+    
+    // Check for gesture data
+    if (getGestureData()) {
+        hasNewData = true;
+    }
+    
+    if (hasNewData) {
+        _lastData.timestamp = Time.now();
+        _lastData.hasNewData = true;
+        
+        // Update persistent storage with new data
+        current.set_faceNumber(_lastData.faceNumber);
+        current.set_faceScore(_lastData.faceScore);
+        current.set_gestureType(_lastData.gestureType);
+        current.set_gestureScore(_lastData.gestureScore);
+        current.set_lastCountTime(_lastData.timestamp);
+    }
+    
+    return hasNewData;
 }
 
+SensorData GestureFaceSensor::getData() const {
+    return _lastData;
+}
+
+void GestureFaceSensor::reset() {
+    Log.info("Resetting GestureFace sensor");
+    _lastData = SensorData();
+    _lastData.sensorType = "GestureFace";
+}
 
 // Get the face detection data
 bool GestureFaceSensor::getFaceData() {
-  static uint16_t oldFaceNumber = 0;
-  uint16_t faceNumber = gfd.getFaceNumber();
-  uint16_t faceScore = gfd.getFaceScore();
-
-  if (faceNumber != oldFaceNumber) {
-    Log.info("Face Number: %d, Old Face Number %d, Face Score: %d", faceNumber, oldFaceNumber, faceScore);
-    oldFaceNumber = faceNumber;
-    current.set_faceNumber(faceNumber);
-    current.set_faceScore(faceScore);
-    if (faceNumber == 0) {
-      sprintf(str, "No face detected\n");
+    if (!_gfd) return false;
+    
+    static uint16_t oldFaceNumber = 0;
+    uint16_t faceNumber = _gfd->getFaceNumber();
+    uint16_t faceScore = _gfd->getFaceScore();
+    
+    if (faceNumber != oldFaceNumber) {
+        Log.info("Face Number: %d, Old Face Number %d, Face Score: %d", 
+                 faceNumber, oldFaceNumber, faceScore);
+        oldFaceNumber = faceNumber;
+        
+        _lastData.faceNumber = faceNumber;
+        _lastData.faceScore = faceScore;
+        
+        if (faceNumber == 0) {
+            snprintf(str, sizeof(str), "No face detected");
+        } else if (faceNumber > 0) {
+            snprintf(str, sizeof(str), "Detected %d faces with confidence of %d%%",
+                     faceNumber, faceScore);
+        } else {
+            snprintf(str, sizeof(str), "Error in face detection");
+        }
+        
+        if (Particle.connected() && sysStatus.get_verboseMode()) {
+            Particle.publish("Status", str, PRIVATE);
+        }
+        Log.info("%s", str);
+        return true;
     }
-    else if (faceNumber > 0) {
-      sprintf(str, "Detected %d faces with a confidence of %d %%", faceNumber, faceScore);
-    }
-    else {
-      sprintf(str,"Error in face detection\n");
-    }
-    if(Particle.connected()) Particle.publish("Status", str, PRIVATE);
-    Log.info("%s", str);
-    return true;
-  }
-  else return false;
+    
+    return false;
 }
 
 bool GestureFaceSensor::getGestureData() {
-    // Print the gesture detection results
-    // - 1: LIKE (👍) - blue
-    // - 2: OK (👌) - green
-    // - 3: STOP (🤚) - red
-    // - 4: YES (✌️) - yellow
-    // - 5: SIX (🤙) - purple
-  static uint16_t oldGestureType = 0;
-  char gestureTypeStr[16];
-  uint16_t gestureType = gfd.getGestureType();
-  uint16_t gestureScore = gfd.getGestureScore();
-
-  if (gestureType != oldGestureType) {
-    oldGestureType = gestureType;
-    current.set_gestureType(gestureType);
-    current.set_gestureScore(gestureScore);
-    if (gestureType == 0) {
-      sprintf(str, "No gesture detected\n");
+    if (!_gfd) return false;
+    
+    // Gesture types:
+    // - 1: LIKE (👍)
+    // - 2: OK (👌)
+    // - 3: STOP (🤚)
+    // - 4: YES (✌️)
+    // - 5: SIX (🤙)
+    static uint16_t oldGestureType = 0;
+    char gestureTypeStr[16];
+    uint16_t gestureType = _gfd->getGestureType();
+    uint16_t gestureScore = _gfd->getGestureScore();
+    
+    if (gestureType != oldGestureType) {
+        oldGestureType = gestureType;
+        
+        _lastData.gestureType = gestureType;
+        _lastData.gestureScore = gestureScore;
+        
+        if (gestureType == 0) {
+            snprintf(str, sizeof(str), "No gesture detected");
+        } else if (gestureType > 0) {
+            switch (gestureType) {
+                case 1: snprintf(gestureTypeStr, sizeof(gestureTypeStr), "LIKE"); break;
+                case 2: snprintf(gestureTypeStr, sizeof(gestureTypeStr), "OK"); break;
+                case 3: snprintf(gestureTypeStr, sizeof(gestureTypeStr), "STOP"); break;
+                case 4: snprintf(gestureTypeStr, sizeof(gestureTypeStr), "PEACE"); break;
+                case 5: snprintf(gestureTypeStr, sizeof(gestureTypeStr), "HANG LOOSE"); break;
+                default: snprintf(gestureTypeStr, sizeof(gestureTypeStr), "Unknown"); break;
+            }
+            snprintf(str, sizeof(str), "Detected %s gesture with confidence of %d%%",
+                     gestureTypeStr, gestureScore);
+        } else {
+            snprintf(str, sizeof(str), "Error in gesture detection");
+        }
+        
+        if (Particle.connected() && sysStatus.get_verboseMode()) {
+            Particle.publish("Status", str, PRIVATE);
+        }
+        Log.info("%s", str);
+        return true;
     }
-    else if (gestureType > 0) {
-      switch (gestureType) {
-        case 1: sprintf(gestureTypeStr, "LIKE"); break;
-        case 2: sprintf(gestureTypeStr, "OK"); break;
-        case 3: sprintf(gestureTypeStr, "STOP"); break;
-        case 4: sprintf(gestureTypeStr, "PEACE"); break;
-        case 5: sprintf(gestureTypeStr, "HANG LOOSE"); break;
-        default: sprintf(gestureTypeStr, "Unknown gesture");
-      }
-      sprintf(str, "Detected a %s gesture with a confidence of %d %%", gestureTypeStr, gestureScore);
-    }
-    else {
-      sprintf(str, "Error in gesture detection\n");
-    }
-    if (Particle.connected()) Particle.publish("Status", str, PRIVATE);
-    Log.info("%s", str);
-    return true;
-  }
-  else return false;
+    
+    return false;
 }
-
